@@ -14,6 +14,7 @@ agentscope-demo/
 ├── 01_hello_agent.py       # 最小对话示例
 ├── 02_stream_events.py     # 流式事件与工具调用演示
 ├── main_agent.py           # 文件助手及工具确认的完整示例
+├── 03_test_tools.py        # pytest 基础测试
 ├── .env.example            # API Key 和模型配置模板
 ├── requirements.txt        # Python 运行依赖
 ├── notes.txt               # 项目备注
@@ -74,7 +75,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-依赖文件锁定了当前工程使用的 AgentScope 和 `python-dotenv` 版本。
+依赖文件锁定了当前工程使用的 AgentScope 和 `python-dotenv` 版本，并声明 pytest 测试依赖。
 
 ### 2. 配置环境变量
 
@@ -127,6 +128,14 @@ python 02_stream_events.py
 ```powershell
 python main_agent.py
 ```
+
+### 4. 运行测试
+
+```powershell
+python -m pytest 03_test_tools.py
+```
+
+测试会检查示例脚本能否导入，以及未配置 API Key 时 `build_model()` 是否以 `SystemExit` 明确退出。真实模型请求测试默认使用 `pytest.mark.skip` 跳过，不会访问网络或产生 API 费用。
 
 ## 配置说明
 

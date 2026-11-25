@@ -41,7 +41,7 @@ def build_model() -> DeepSeekChatModel | OpenAIChatModel:
             model=os.getenv("OPENAI_MODEL") or "gpt-4o-mini",
         )
 
-    raise ValueError(
+    raise SystemExit(
         "未配置 API Key，请在项目根目录的 .env 文件中设置 "
         "DEEPSEEK_API_KEY 或 OPENAI_API_KEY。"
     )
