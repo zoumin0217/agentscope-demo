@@ -14,6 +14,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 EXAMPLE_SCRIPTS = (
     "01_hello_agent.py",
     "02_stream_events.py",
+    "11_team_agent.py",
+    "12_review_team.py",
     "main_agent.py",
     "14_gradio_ui.py",
 )
@@ -283,6 +285,163 @@ def test_gradio_chat_logs_errors_without_exposing_traceback(
     assert "抱歉" in result
     assert "internal traceback detail" not in result
     assert "internal traceback detail" in caplog.text
+
+
+def test_review_team_returns_leader_summary() -> None:
+    """确认需求以 UserMsg 交给团队，最终返回组长消息。"""
+    from types import SimpleNamespace
+
+    from agentscope.event import ReplyStartEvent
+    from agentscope.message import Msg, TextBlock
+
+    module = load_script("12_review_team.py")
+    received: list[Any] = []
+    summary = Msg(
+        name="评审组长",
+        role="assistant",
+        content=[TextBlock(text="最终评审汇总")],
+    )
+
+    class FakePipeline:
+        leader = SimpleNamespace(
+            name="评审组长",
+            state=SimpleNamespace(
+                get_reply_message=lambda name: (
+                    summary if name == "评审组长" else None
+                ),
+            ),
+        )
+
+        async def reply_stream(self, inputs: Any) -> Any:
+            received.append(inputs)
+            yield ReplyStartEvent(
+                session_id="session",
+                reply_id="reply",
+                name="评审组长",
+            )
+
+    result = asyncio.run(
+        module["review_requirement"]("实现导出功能", FakePipeline()),
+    )
+
+    assert result == "最终评审汇总"
+    assert isinstance(received[0], Msg)
+    assert received[0].role == "user"
+    assert received[0].get_text_content() == "实现导出功能"
+
+
+def test_team_agent_returns_leader_reply() -> None:
+    """确认 TeamPipeline 输入到达领队，且最终只取领队答复。"""
+    from types import SimpleNamespace
+
+    from agentscope.event import ReplyStartEvent
+    from agentscope.message import Msg, TextBlock
+
+    module = load_script("11_team_agent.py")
+    received: list[Any] = []
+    summary = Msg(
+        name="领队",
+        role="assistant",
+        content=[TextBlock(text="团队最终稿")],
+    )
+
+    class FakePipeline:
+        leader = SimpleNamespace(
+            name="领队",
+            state=SimpleNamespace(
+                get_reply_message=lambda name: (
+                    summary if name == "领队" else None
+                ),
+            ),
+        )
+
+        async def reply_stream(self, inputs: Any) -> Any:
+            received.append(inputs)
+            for name in ("领队", "调研", "写作", "评审"):
+                yield ReplyStartEvent(
+                    session_id="session",
+                    reply_id=f"reply-{name}",
+                    name=name,
+                )
+
+    result = asyncio.run(
+        module["run_team_task"]("写一段介绍", FakePipeline()),
+    )
+
+    assert result == "团队最终稿"
+    assert received[0].role == "user"
+    assert received[0].get_text_content() == "写一段介绍"
+
+
+def test_team_agent_rejects_missing_member_calls() -> None:
+    """避免没有调用全部成员时仍返回看似成功的汇总。"""
+    from types import SimpleNamespace
+
+    from agentscope.event import ReplyStartEvent
+    from agentscope.message import Msg, TextBlock
+
+    module = load_script("11_team_agent.py")
+    summary = Msg(
+        name="领队",
+        role="assistant",
+        content=[TextBlock(text="未完成评审的内容")],
+    )
+
+    class FakePipeline:
+        leader = SimpleNamespace(
+            name="领队",
+            state=SimpleNamespace(
+                get_reply_message=lambda name: (
+                    summary if name == "领队" else None
+                ),
+            ),
+        )
+
+        async def reply_stream(self, inputs: Any) -> Any:
+            yield ReplyStartEvent(
+                session_id="session",
+                reply_id="reply",
+                name="领队",
+            )
+
+    with pytest.raises(RuntimeError, match="缺少"):
+        asyncio.run(
+            module["run_team_task"]("写一段介绍", FakePipeline()),
+        )
+
+
+def test_team_agent_rejects_empty_leader_reply() -> None:
+    """避免把真实模型的空最终消息误报为成功。"""
+    from types import SimpleNamespace
+
+    from agentscope.event import ReplyStartEvent
+    from agentscope.message import Msg
+
+    module = load_script("11_team_agent.py")
+    empty_reply = Msg(name="领队", role="assistant", content=[])
+
+    class FakePipeline:
+        leader = SimpleNamespace(
+            name="领队",
+            state=SimpleNamespace(
+                get_reply_message=lambda name: (
+                    empty_reply if name == "领队" else None
+                ),
+            ),
+        )
+
+        async def reply_stream(self, inputs: Any) -> Any:
+            for name in ("领队", "调研", "写作", "评审"):
+                yield ReplyStartEvent(
+                    session_id="session",
+                    reply_id=f"reply-{name}",
+                    name=name,
+                )
+
+    with pytest.raises(RuntimeError, match="最终答复为空"):
+        asyncio.run(
+            module["run_team_task"]("写一段介绍", FakePipeline()),
+        )
 
 
 @pytest.mark.skip(reason="需要有效 API Key 和可用网络，避免测试时调用真实模型服务")

@@ -13,6 +13,8 @@
 agentscope-demo/
 ├── 01_hello_agent.py       # 最小对话示例
 ├── 02_stream_events.py     # 流式事件与工具调用演示
+├── 11_team_agent.py        # AgentScope TeamPipeline 基础示例
+├── 12_review_team.py       # 代码评审小团队
 ├── main_agent.py           # 文件助手及工具确认的完整示例
 ├── model_config.py         # 共享的多厂商模型选择
 ├── agent_memory/           # 运行时生成的长期记忆（已加入 .gitignore）
@@ -48,7 +50,29 @@ agentscope-demo/
 
 示例任务会提示智能体查看当前目录中的文件。
 
-### 3. 完整文件助手：`main_agent.py`
+### 3. TeamPipeline 协作：`11_team_agent.py`
+
+输入任务后由领队分派给调研、写作和评审成员，最终打印领队汇总。直接回车会使用内置的 AI 智能体介绍任务：
+
+```powershell
+python 11_team_agent.py
+```
+
+也可以通过参数直接提交任务（适合脚本调用和自动化验证）：
+
+```powershell
+python 11_team_agent.py --task "请用中文介绍 AI 智能体"
+```
+
+### 4. 代码评审团队：`12_review_team.py`
+
+使用 `TeamPipeline` 将需求分派给需求分析师、代码审查员和测试方案师，由评审组长汇总。运行后输入一段需求文字：
+
+```powershell
+python 12_review_team.py
+```
+
+### 5. 完整文件助手：`main_agent.py`
 
 提供一个可以持续交互的本地文件助手，支持：
 
