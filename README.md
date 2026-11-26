@@ -15,6 +15,7 @@ agentscope-demo/
 ├── 02_stream_events.py     # 流式事件与工具调用演示
 ├── main_agent.py           # 文件助手及工具确认的完整示例
 ├── model_config.py         # 共享的多厂商模型选择
+├── agent_memory/           # 运行时生成的长期记忆（已加入 .gitignore）
 ├── 03_test_tools.py        # pytest 基础测试
 ├── .env.example            # API Key 和模型配置模板
 ├── requirements.txt        # Python 运行依赖
@@ -53,6 +54,8 @@ agentscope-demo/
 - `Bash()`：运行本地命令
 - `Read()`：读取文件
 - `Write()`：写入文件
+
+助手使用 `AgenticMemoryMiddleware` 保存用户明确提供的姓名、称呼和长期偏好，并在后续相关对话中检索引用。记忆存放在 `agent_memory/`，已通过 `.gitignore` 排除。
 
 智能体在执行工具前会逐项请求人工确认；输入 `y` 或 `yes` 允许执行，其他输入拒绝。交互中输入 `quit`、`exit` 或 `退出` 可结束程序。
 
@@ -176,6 +179,14 @@ python 02_stream_events.py
 ```powershell
 python main_agent.py
 ```
+
+需要从空记忆开始时，在启动前传入 `--reset`：
+
+```powershell
+python main_agent.py --reset
+```
+
+该选项只会清除 `agent_memory/`；不传入时会保留已有记忆。
 
 ### 4. 运行测试
 

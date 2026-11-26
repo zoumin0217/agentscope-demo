@@ -1,6 +1,9 @@
 """带有本地命令和文件操作工具的 AgentScope 2.x 智能体。"""
 
+import argparse
 import asyncio
+import shutil
+from pathlib import Path
 from typing import AsyncGenerator
 
 from agentscope.agent import Agent
@@ -11,9 +14,32 @@ from agentscope.event import (
     RequireUserConfirmEvent,
     UserConfirmResultEvent,
 )
+from agentscope.middleware import AgenticMemoryMiddleware
 from agentscope.message import Msg, UserMsg
 from agentscope.tool import Bash, Read, Toolkit, Write
 from model_config import build_model
+
+MEMORY_WORKDIR = "./agent_memory"
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """解析命令行选项。"""
+    parser = argparse.ArgumentParser(description="带记忆的本地文件助手")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="启动前清空本地记忆",
+    )
+    return parser.parse_args(argv)
+
+
+def _reset_memory_directory() -> None:
+    """仅清理本助手的记忆目录，避免误删其他路径。"""
+    memory_path = Path(MEMORY_WORKDIR)
+    if memory_path.is_symlink():
+        raise RuntimeError(f"拒绝清理符号链接记忆目录：{memory_path}")
+    if memory_path.exists():
+        shutil.rmtree(memory_path)
 
 
 async def reply_stream_with_confirmation(
@@ -77,18 +103,26 @@ async def reply_stream_with_confirmation(
         )
 
 
-async def main() -> None:
+async def main(reset_memory: bool = False) -> None:
     """运行文件助手的交互式对话。"""
+    if reset_memory:
+        _reset_memory_directory()
+
     toolkit = Toolkit(tools=[Bash(), Read(), Write()])
     agent = Agent(
         name="文件助手",
         system_prompt=(
             "你是一个中文本地文件助手，可以在本地运行命令、读取文件和写入文件。"
             "请根据用户的需求自主决定是否调用以及调用哪个工具；"
-            "完成任务后用中文简洁回答。"
+            "请留意用户每次明确提供或更正的姓名、称呼和长期偏好，"
+            "立即按记忆规范保存或更新，并在后续相关对话中自然引用；"
+            "不要猜测用户未明确提供的信息。完成任务后用中文简洁回答。"
         ),
         model=build_model(),
         toolkit=toolkit,
+        middlewares=[
+            AgenticMemoryMiddleware(workdir=MEMORY_WORKDIR),
+        ],
     )
 
     print("=== 文件助手 ===")
@@ -121,4 +155,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main(reset_memory=parse_args().reset))

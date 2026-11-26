@@ -145,6 +145,45 @@ def test_build_model_provider_priority(
     assert result[1]["model"] == "deepseek-chat"
 
 
+@pytest.mark.parametrize("reset_requested", [False, True])
+def test_main_memory_middleware_and_optional_reset(
+    reset_requested: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """确认记忆 middleware 已接入，且只有 --reset 会清空记忆目录。"""
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    monkeypatch.chdir(tmp_path)
+    memory_file = tmp_path / "agent_memory" / "Memory" / "user.md"
+    memory_file.parent.mkdir(parents=True)
+    memory_file.write_text("姓名：小明", encoding="utf-8")
+    env_file = tmp_path / ".env"
+    env_file.write_text("KEEP_ME=true", encoding="utf-8")
+    module = load_script("main_agent.py")
+    namespace = module["main"].__globals__
+    agent_kwargs: dict[str, Any] = {}
+
+    class FakeAgent:
+        def __init__(self, **kwargs: Any) -> None:
+            agent_kwargs.update(kwargs)
+
+    monkeypatch.setitem(namespace, "Agent", FakeAgent)
+    monkeypatch.setitem(namespace, "build_model", lambda: object())
+    monkeypatch.setattr("builtins.input", lambda prompt: "quit")
+    args = module["parse_args"](["--reset"] if reset_requested else [])
+
+    asyncio.run(module["main"](reset_memory=args.reset))
+
+    assert memory_file.exists() is not reset_requested
+    assert env_file.read_text(encoding="utf-8") == "KEEP_ME=true"
+    assert len(agent_kwargs["middlewares"]) == 1
+    middleware = agent_kwargs["middlewares"][0]
+    assert type(middleware).__name__ == "AgenticMemoryMiddleware"
+    assert middleware._workdir == "./agent_memory"
+    assert "姓名" in agent_kwargs["system_prompt"]
+    assert "偏好" in agent_kwargs["system_prompt"]
+
+
 @pytest.mark.skip(reason="需要有效 API Key 和可用网络，避免测试时调用真实模型服务")
 def test_real_model_response() -> None:
     """可在配置真实 API 后手动启用的在线模型冒烟测试。"""
