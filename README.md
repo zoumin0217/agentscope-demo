@@ -17,6 +17,7 @@ agentscope-demo/
 ├── model_config.py         # 共享的多厂商模型选择
 ├── agent_memory/           # 运行时生成的长期记忆（已加入 .gitignore）
 ├── 03_test_tools.py        # pytest 基础测试
+├── 14_gradio_ui.py         # Gradio 本地 Web 聊天界面
 ├── .env.example            # API Key 和模型配置模板
 ├── requirements.txt        # Python 运行依赖
 ├── notes.txt               # 项目备注
@@ -195,6 +196,14 @@ python -m pytest 03_test_tools.py
 ```
 
 测试会检查示例脚本能否导入，以及未配置 API Key 时 `build_model()` 是否以 `SystemExit` 明确退出。真实模型请求测试默认使用 `pytest.mark.skip` 跳过，不会访问网络或产生 API 费用。
+
+### Gradio Web 界面
+
+```powershell
+python 14_gradio_ui.py
+```
+
+界面仅监听本机地址。工具请求会在聊天中逐项显示工具名和必要参数，回复 `y`/`是` 确认或 `n`/`否` 拒绝；异常详情仅记录在服务端日志。
 
 ## 配置说明
 

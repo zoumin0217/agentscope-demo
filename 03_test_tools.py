@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from agentscope.message import UserMsg
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -14,6 +15,7 @@ EXAMPLE_SCRIPTS = (
     "01_hello_agent.py",
     "02_stream_events.py",
     "main_agent.py",
+    "14_gradio_ui.py",
 )
 MODEL_BUILDER_SCRIPTS = (
     "01_hello_agent.py",
@@ -182,6 +184,105 @@ def test_main_memory_middleware_and_optional_reset(
     assert middleware._workdir == "./agent_memory"
     assert "姓名" in agent_kwargs["system_prompt"]
     assert "偏好" in agent_kwargs["system_prompt"]
+
+
+def test_gradio_chat_returns_only_final_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """确认 Gradio 只返回最终答复文本，并传入当前轮 UserMsg。"""
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    module = load_script("14_gradio_ui.py")
+    namespace = module["chat"].__globals__
+    received: list[Any] = []
+
+    class FakeAgent:
+        async def reply_stream(
+            self,
+            inputs: Any,
+            yield_final_msg: bool,
+        ) -> Any:
+            received.append(inputs)
+            yield UserMsg(name="assistant", content="处理完成")
+
+    monkeypatch.setitem(namespace, "agent", FakeAgent())
+
+    result = asyncio.run(module["chat"]("读取文件", []))
+
+    assert result == "处理完成"
+    assert received[0].name == "user"
+    assert received[0].get_text_content() == "读取文件"
+
+
+def test_gradio_chat_confirms_tools_and_hides_internal_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """确认工具事件先显示必要参数，再通过用户答复继续执行。"""
+    from agentscope.event import RequireUserConfirmEvent, UserConfirmResultEvent
+    from agentscope.message import ToolCallBlock
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    module = load_script("14_gradio_ui.py")
+    namespace = module["chat"].__globals__
+    tool_call = ToolCallBlock(
+        id="call-1",
+        name="Read",
+        input='{"file_path":"README.md"}',
+    )
+    received: list[Any] = []
+
+    class FakeAgent:
+        async def reply_stream(
+            self,
+            inputs: Any,
+            yield_final_msg: bool,
+        ) -> Any:
+            received.append(inputs)
+            if isinstance(inputs, UserConfirmResultEvent):
+                assert inputs.confirm_results[0].confirmed
+                yield UserMsg(name="assistant", content="读取完成")
+            else:
+                yield RequireUserConfirmEvent(
+                    reply_id="reply-1",
+                    tool_calls=[tool_call],
+                )
+
+    monkeypatch.setitem(namespace, "agent", FakeAgent())
+
+    prompt = asyncio.run(module["chat"]("读取 README", []))
+    result = asyncio.run(module["chat"]("y", []))
+
+    assert "Read" in prompt
+    assert "README.md" in prompt
+    assert "reply-1" not in prompt
+    assert result == "读取完成"
+    assert isinstance(received[1], UserConfirmResultEvent)
+
+
+def test_gradio_chat_logs_errors_without_exposing_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """确认异常细节只进入服务端日志，前端收到友好提示。"""
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    module = load_script("14_gradio_ui.py")
+    namespace = module["chat"].__globals__
+
+    class BrokenAgent:
+        async def reply_stream(
+            self,
+            inputs: Any,
+            yield_final_msg: bool,
+        ) -> Any:
+            raise RuntimeError("internal traceback detail")
+            yield
+
+    monkeypatch.setitem(namespace, "agent", BrokenAgent())
+
+    result = asyncio.run(module["chat"]("触发错误", []))
+
+    assert "抱歉" in result
+    assert "internal traceback detail" not in result
+    assert "internal traceback detail" in caplog.text
 
 
 @pytest.mark.skip(reason="需要有效 API Key 和可用网络，避免测试时调用真实模型服务")
