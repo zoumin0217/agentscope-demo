@@ -2,7 +2,7 @@
 
 这是一个基于 **AgentScope 2.x** 的 Python 智能体示例工程，演示如何：
 
-- 创建支持 DeepSeek 或 OpenAI 兼容接口的中文智能体
+- 按优先级自动选择 OpenAI、DashScope、Ollama 或 DeepSeek 模型
 - 使用流式响应接收文本增量和工具事件
 - 为本地命令、文件读取和文件写入工具添加人工确认
 - 在 Windows 环境中运行交互式文件助手
@@ -14,6 +14,7 @@ agentscope-demo/
 ├── 01_hello_agent.py       # 最小对话示例
 ├── 02_stream_events.py     # 流式事件与工具调用演示
 ├── main_agent.py           # 文件助手及工具确认的完整示例
+├── model_config.py         # 共享的多厂商模型选择
 ├── 03_test_tools.py        # pytest 基础测试
 ├── .env.example            # API Key 和模型配置模板
 ├── requirements.txt        # Python 运行依赖
@@ -27,11 +28,13 @@ agentscope-demo/
 
 创建一个名为“小助”的中文智能体，向模型发送“介绍下你自己”，并打印完整回复。
 
-模型选择规则：
+模型选择规则（两份示例的 `build_model()` 一致）：
 
-1. 配置了 `DEEPSEEK_API_KEY` 时使用 `deepseek-chat`
-2. 否则配置了 `OPENAI_API_KEY` 时使用兼容 OpenAI 的接口
-3. 两者都未配置时抛出配置错误
+1. `OPENAI_API_KEY`：使用 `OpenAIChatModel`，默认模型为 `gpt-4o-mini`
+2. `DASHSCOPE_API_KEY`：使用 `DashScopeChatModel(model="qwen-plus")`
+3. 配置 `OLLAMA_HOST`，或探测到本机 `localhost:11434` 可连接：使用 `OllamaChatModel`，默认模型为 `llama3.2`
+4. `DEEPSEEK_API_KEY`：使用 `DeepSeekChatModel(model="deepseek-chat")`
+5. 都不可用时提示配置 `.env` 或启动 Ollama
 
 ### 2. 流式事件：`02_stream_events.py`
 
@@ -57,8 +60,8 @@ agentscope-demo/
 
 - Windows 10/11
 - Python 3.10 或更高版本
-- 可访问所选模型服务的网络环境
-- DeepSeek API Key 或 OpenAI 兼容服务的 API Key
+- 可访问所选云模型服务的网络环境，或已启动的本地 Ollama
+- 按优先级配置 OpenAI、DashScope、Ollama 或 DeepSeek 中任一种
 
 > 本工程中的 `.venv` 环境已验证 AgentScope 版本为 `2.0.12`，并安装了 `python-dotenv`。
 
@@ -85,27 +88,72 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-在 `.env` 中二选一配置：
+按需要在 `.env` 中配置以下任一方式：
+
+#### 使用 OpenAI
+
+```dotenv
+OPENAI_API_KEY=你的OpenAI密钥
+OPENAI_BASE_URL=
+OPENAI_MODEL=gpt-4o-mini
+```
+
+兼容接口可按服务商文档填写 `OPENAI_BASE_URL` 和 `OPENAI_MODEL`。OpenAI credential 的标准用法为：
+
+```python
+OpenAIChatModel(
+    credential=OpenAICredential(api_key=api_key, base_url=base_url),
+    model=model_name,
+)
+```
+
+#### 使用 DashScope
+
+```dotenv
+DASHSCOPE_API_KEY=你的百炼API密钥
+```
+
+标准用法：
+
+```python
+DashScopeChatModel(
+    credential=DashScopeCredential(api_key=api_key),
+    model="qwen-plus",
+)
+```
+
+#### 使用本地 Ollama
+
+默认探测 `localhost:11434`，也可以显式配置服务地址和模型：
+
+```dotenv
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+```
+
+标准用法：
+
+```python
+OllamaChatModel(
+    credential=OllamaCredential(host=ollama_host),
+    model=ollama_model,
+)
+```
 
 #### 使用 DeepSeek
 
 ```dotenv
 DEEPSEEK_API_KEY=你的DeepSeek密钥
-OPENAI_API_KEY=
-OPENAI_BASE_URL=
-OPENAI_MODEL=
 ```
 
-#### 使用 OpenAI 或兼容接口
+标准用法：
 
-```dotenv
-DEEPSEEK_API_KEY=
-OPENAI_API_KEY=你的API密钥
-OPENAI_BASE_URL=https://your-api-provider.example/v1
-OPENAI_MODEL=模型名称
+```python
+DeepSeekChatModel(
+    credential=DeepSeekCredential(api_key=api_key),
+    model="deepseek-chat",
+)
 ```
-
-对于 OpenAI 官方接口，可以将 `OPENAI_BASE_URL` 留空，并在 `OPENAI_MODEL` 中指定模型；未填写时默认使用 `gpt-4o-mini`。
 
 > 不要提交 `.env`。项目的 `.gitignore` 已包含该文件。
 
@@ -141,10 +189,13 @@ python -m pytest 03_test_tools.py
 
 | 环境变量 | 必需性 | 说明 |
 | --- | --- | --- |
-| `DEEPSEEK_API_KEY` | 二选一 | 配置后优先使用 DeepSeek 模型 |
-| `OPENAI_API_KEY` | 二选一 | 未配置 DeepSeek 时使用 OpenAI/兼容接口 |
+| `OPENAI_API_KEY` | 可选 | 优先级最高；使用 OpenAI/兼容接口 |
 | `OPENAI_BASE_URL` | 可选 | OpenAI 兼容接口地址；官方接口可留空 |
-| `OPENAI_MODEL` | 可选 | 兼容接口或官方模型名称；默认 `gpt-4o-mini` |
+| `OPENAI_MODEL` | 可选 | OpenAI 模型名称；默认 `gpt-4o-mini` |
+| `DASHSCOPE_API_KEY` | 可选 | OpenAI key 未设置时使用 DashScope `qwen-plus` |
+| `OLLAMA_HOST` | 可选 | 配置后使用该 Ollama 地址；未设置则探测 `localhost:11434` |
+| `OLLAMA_MODEL` | 可选 | Ollama 模型名称；默认 `llama3.2` |
+| `DEEPSEEK_API_KEY` | 可选 | 前三种方式不可用时使用 `deepseek-chat` |
 
 ## 工具确认机制
 
@@ -169,19 +220,17 @@ python -m pytest 03_test_tools.py
 
 ## 常见问题
 
-### 提示未配置 API Key
+### 提示未找到可用模型配置
 
-确认项目根目录存在 `.env`，且至少配置了以下之一：
-
-```dotenv
-DEEPSEEK_API_KEY=...
-```
-
-或：
+确认项目根目录存在 `.env`，并按优先级配置至少一种云服务 API Key，或启动本地 Ollama：
 
 ```dotenv
 OPENAI_API_KEY=...
+DASHSCOPE_API_KEY=...
+DEEPSEEK_API_KEY=...
 ```
+
+本地模型默认检测 `localhost:11434`，也可填写 `OLLAMA_HOST`。详细配置参见 `.env.example`。
 
 ### 可以使用现有虚拟环境吗？
 

@@ -1,13 +1,9 @@
 """带有本地命令和文件操作工具的 AgentScope 2.x 智能体。"""
 
 import asyncio
-import os
 from typing import AsyncGenerator
 
-from dotenv import load_dotenv
-
 from agentscope.agent import Agent
-from agentscope.credential import DeepSeekCredential, OpenAICredential
 from agentscope.event import (
     AgentEvent,
     ConfirmResult,
@@ -16,35 +12,8 @@ from agentscope.event import (
     UserConfirmResultEvent,
 )
 from agentscope.message import Msg, UserMsg
-from agentscope.model import DeepSeekChatModel, OpenAIChatModel
 from agentscope.tool import Bash, Read, Toolkit, Write
-
-load_dotenv()
-
-
-def build_model() -> DeepSeekChatModel | OpenAIChatModel:
-    """根据环境变量创建 DeepSeek 或 OpenAI 对话模型。"""
-    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-    if deepseek_api_key:
-        return DeepSeekChatModel(
-            credential=DeepSeekCredential(api_key=deepseek_api_key),
-            model="deepseek-chat",
-        )
-
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if openai_api_key:
-        return OpenAIChatModel(
-            credential=OpenAICredential(
-                api_key=openai_api_key,
-                base_url=os.getenv("OPENAI_BASE_URL") or None,
-            ),
-            model=os.getenv("OPENAI_MODEL") or "gpt-4o-mini",
-        )
-
-    raise SystemExit(
-        "未配置 API Key，请在项目根目录的 .env 文件中设置 "
-        "DEEPSEEK_API_KEY 或 OPENAI_API_KEY。"
-    )
+from model_config import build_model
 
 
 async def reply_stream_with_confirmation(
