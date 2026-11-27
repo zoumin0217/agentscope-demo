@@ -15,6 +15,8 @@ agentscope-demo/
 ├── 02_stream_events.py     # 流式事件与工具调用演示
 ├── 11_team_agent.py        # AgentScope TeamPipeline 基础示例
 ├── 12_review_team.py       # 代码评审小团队
+├── 13_mcp_demo.py          # 使用 MCP 接入本机文件系统服务
+├── 13_mcp_demo2.py         # 使用 MCP 接入 Playwright 浏览器服务
 ├── main_agent.py           # 文件助手及工具确认的完整示例
 ├── model_config.py         # 共享的多厂商模型选择
 ├── agent_memory/           # 运行时生成的长期记忆（已加入 .gitignore）
@@ -198,6 +200,20 @@ python 01_hello_agent.py
 ```powershell
 python 02_stream_events.py
 ```
+
+运行 MCP 文件系统示例（需要 Node.js/npm 的 `npx` 命令可用）：
+
+```powershell
+python 13_mcp_demo.py
+```
+
+运行 Playwright MCP 浏览器示例（需要 Node.js 20 或更高版本，并配置可用的模型）：
+
+```powershell
+python 13_mcp_demo2.py
+```
+
+启动后可选择打开 example.com 并截图、搜索 GitHub 仓库，或模拟 iPhone 15 并截图。截图自动保存到 `mcp_outputs/`；执行浏览器操作前，程序会显示工具请求并询问是否允许。
 
 运行交互式文件助手：
 

@@ -16,6 +16,8 @@ EXAMPLE_SCRIPTS = (
     "02_stream_events.py",
     "11_team_agent.py",
     "12_review_team.py",
+    "13_mcp_demo.py",
+    "13_mcp_demo2.py",
     "main_agent.py",
     "14_gradio_ui.py",
 )
@@ -47,6 +49,167 @@ def test_example_scripts_import(
     monkeypatch.syspath_prepend(str(PROJECT_ROOT))
 
     load_script(script_name)
+
+
+def test_mcp_demo_reports_missing_npx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """缺少 Node.js/npx 时，MCP 示例应在连接前给出清晰错误。"""
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    module = load_script("13_mcp_demo.py")
+    monkeypatch.setattr(module["shutil"], "which", lambda _: None)
+
+    with pytest.raises(RuntimeError, match="找不到 npx"):
+        module["build_filesystem_mcp_config"]()
+
+
+def test_mcp_demo_wraps_npx_for_windows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows 下通过 cmd.exe 启动 npx.cmd。"""
+    from types import SimpleNamespace
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    module = load_script("13_mcp_demo.py")
+    monkeypatch.setattr(module["shutil"], "which", lambda _: "npx.cmd")
+    monkeypatch.setitem(
+        module["build_filesystem_mcp_config"].__globals__,
+        "os",
+        SimpleNamespace(name="nt", environ={"COMSPEC": "cmd.exe"}),
+    )
+
+    config = module["build_filesystem_mcp_config"]()
+
+    assert config["command"] == "cmd.exe"
+    assert config["args"] == [
+        "/d",
+        "/s",
+        "/c",
+        "npx -y @modelcontextprotocol/server-filesystem ./",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("extra_args", "expected_command"),
+    [
+        (
+            ("--viewport-size", "1280x720"),
+            'npx -y @playwright/mcp@latest --output-dir ./mcp_outputs '
+            "--viewport-size 1280x720",
+        ),
+        (
+            ("--device", "iPhone 15"),
+            'npx -y @playwright/mcp@latest --output-dir ./mcp_outputs '
+            '--device "iPhone 15"',
+        ),
+    ],
+)
+def test_playwright_mcp_config_wraps_npx_for_windows(
+    extra_args: tuple[str, ...],
+    expected_command: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Windows 下通过 cmd.exe 启动 npx.cmd，并保留任务启动参数。"""
+    from types import SimpleNamespace
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    monkeypatch.chdir(tmp_path)
+    module = load_script("13_mcp_demo2.py")
+    monkeypatch.setattr(module["shutil"], "which", lambda _: "npx.cmd")
+    monkeypatch.setitem(
+        module["build_playwright_mcp_config"].__globals__,
+        "os",
+        SimpleNamespace(name="nt", environ={"COMSPEC": "cmd.exe"}),
+    )
+
+    config = module["build_playwright_mcp_config"](extra_args)
+
+    assert config["type"] == "stdio_mcp"
+    assert config["command"] == "cmd.exe"
+    assert config["args"] == ["/d", "/s", "/c", expected_command]
+
+
+def test_playwright_demo_confirms_tools_before_closing_mcp(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """待确认的浏览器工具获批并完成后，才关闭 MCP 客户端。"""
+    from agentscope.event import (
+        RequireUserConfirmEvent,
+        UserConfirmResultEvent,
+    )
+    from agentscope.message import Msg, TextBlock, ToolCallBlock
+
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
+    module = load_script("13_mcp_demo2.py")
+    client_state = {"connected": False, "closed": False}
+
+    class FakeClient:
+        def __init__(self, **kwargs: Any) -> None:
+            assert kwargs["is_stateful"] is True
+
+        async def connect(self) -> None:
+            client_state["connected"] = True
+
+        async def close(self) -> None:
+            client_state["closed"] = True
+
+    class FakeToolkit:
+        def __init__(self, mcps: list[Any]) -> None:
+            assert client_state["connected"]
+            assert len(mcps) == 1
+
+    class FakeAgent:
+        def __init__(self, **kwargs: Any) -> None:
+            assert kwargs["name"] == "浏览器助手"
+
+        async def reply_stream(
+            self,
+            inputs: Any,
+            yield_final_msg: bool,
+        ) -> Any:
+            assert yield_final_msg
+            if isinstance(inputs, UserConfirmResultEvent):
+                assert inputs.confirm_results[0].confirmed
+                assert client_state["connected"]
+                yield Msg(
+                    name="浏览器助手",
+                    role="assistant",
+                    content=[TextBlock(text="截图完成。")],
+                )
+                return
+
+            yield RequireUserConfirmEvent(
+                reply_id="reply-1",
+                tool_calls=[
+                    ToolCallBlock(
+                        id="call-1",
+                        name="mcp__playwright__browser_navigate",
+                        input='{"url":"https://example.com"}',
+                    ),
+                ],
+            )
+            yield Msg(
+                name="浏览器助手",
+                role="assistant",
+                content=[TextBlock(text="I'm waiting for your permission.")],
+            )
+
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+    namespace = module["run_task"].__globals__
+    monkeypatch.setitem(namespace, "MCPClient", FakeClient)
+    monkeypatch.setitem(namespace, "Toolkit", FakeToolkit)
+    monkeypatch.setitem(namespace, "Agent", FakeAgent)
+    monkeypatch.setitem(namespace, "build_model", lambda: object())
+    monkeypatch.setitem(namespace, "build_playwright_mcp_config", lambda _: {})
+
+    asyncio.run(module["run_task"]("网页截图", "截图", ()))
+
+    output = capsys.readouterr().out
+    assert "截图完成。" in output
+    assert "I'm waiting for your permission." not in output
+    assert client_state["closed"]
 
 
 @pytest.mark.parametrize("script_name", MODEL_BUILDER_SCRIPTS)
