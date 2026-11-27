@@ -1,4 +1,8 @@
-"""基于 AgentScope TeamPipeline 的多智能体协作示例。"""
+"""基于 AgentScope TeamPipeline 的多智能体协作示例。
+
+领队负责拆分任务并调用调研、写作、评审三个成员；
+最终答复通过领队的 AgentState 检索，而不是简单拼接成员的中间消息。
+"""
 
 import argparse
 import asyncio

@@ -1,7 +1,12 @@
-"""基础导入和模型配置测试。"""
+"""基础导入、模型配置、MCP 和团队流程测试。
 
-import asyncio
-import runpy
+pytest 会收集模块中以 test_ 开头的函数并自动执行。
+runpy 用于隔离加载示例脚本，monkeypatch 用于替换网络、命令、环境变量或伪造对象，
+这样测试可以验证分支逻辑而不必调用真实模型或浏览器。
+"""
+
+import asyncio  # 测试异步函数时可在同步测试中用 asyncio.run 驱动事件循环。
+import runpy  # runpy.run_path 可加载脚本并返回模块级变量字典。
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
@@ -10,7 +15,8 @@ import pytest
 from agentscope.message import UserMsg
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent  # __file__ 是当前测试文件路径，parent 定位工程根目录。
+# EXAMPLE_SCRIPTS 集中声明需要验证模块级导入的示例，新增脚本可加入此元组。
 EXAMPLE_SCRIPTS = (
     "01_hello_agent.py",
     "02_stream_events.py",
@@ -21,6 +27,7 @@ EXAMPLE_SCRIPTS = (
     "main_agent.py",
     "14_gradio_ui.py",
 )
+# MODEL_BUILDER_SCRIPTS 声明哪些文件暴露 build_model 函数，便于复用厂商优先级测试。
 MODEL_BUILDER_SCRIPTS = (
     "01_hello_agent.py",
     "main_agent.py",

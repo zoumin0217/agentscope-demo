@@ -42,7 +42,11 @@ DEMO_TASKS = {
 
 
 def choose_task() -> tuple[str, str, tuple[str, ...]] | None:
-    """显示示例任务菜单并返回所选任务。"""
+    """显示示例任务菜单并返回所选任务。
+
+    返回三元组依次是界面标题、发送给智能体的提示词和额外 MCP 启动参数。
+    用户选择退出时返回 None。
+    """
     print("请选择一个 Playwright MCP 演示任务：")
     for key, (title, _, _) in DEMO_TASKS.items():
         print(f"{key}. {title}")

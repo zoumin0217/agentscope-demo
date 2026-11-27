@@ -1,4 +1,8 @@
-"""基于 AgentScope TeamPipeline 的代码评审小团队示例。"""
+"""基于 AgentScope TeamPipeline 的代码评审小团队示例。
+
+组长先分派需求分析、代码审查和测试方案，再汇总成结构化评审报告；
+没有代码时，审查员只允许指出需求风险，不得编造具体缺陷。
+"""
 
 import asyncio
 

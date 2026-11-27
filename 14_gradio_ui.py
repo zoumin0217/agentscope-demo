@@ -1,6 +1,10 @@
-"""基于 Gradio 的中文本地文件助手界面。"""
+"""基于 Gradio 的中文本地文件助手界面。
 
-import logging
+该模块维护全局 Agent 实例与待确认工具状态，把异步智能体事件转换为
+适合 Web 聊天界面展示的字符串，并确保异常不会把后端 traceback 暴露给用户。
+"""
+
+import logging  # logging 将异常和运行信息写入服务端日志。
 from typing import Any
 
 import gradio as gr

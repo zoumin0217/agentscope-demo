@@ -1,9 +1,13 @@
-"""共享的 AgentScope 模型选择配置。"""
+"""共享的 AgentScope 模型选择配置。
 
-import os
-import socket
+各示例都可以调用 build_model() 创建模型对象，而不必重复编写厂商判断。
+函数优先读取环境变量中的云模型配置，再尝试本机 Ollama，最后才报错退出。
+"""
 
-from dotenv import load_dotenv
+import os  # os 用于读取操作系统环境变量和创建提供商凭证配置。
+import socket  # socket 用于探测本机 11434 端口是否存在 Ollama 服务。
+
+from dotenv import load_dotenv  # load_dotenv 从 .env 文件加载键值对到环境变量。
 
 from agentscope.credential import (
     DashScopeCredential,
@@ -19,13 +23,19 @@ from agentscope.model import (
     OpenAIChatModel,
 )
 
-load_dotenv()
+load_dotenv()  # 模块导入时立即加载项目根目录或上层目录中的 .env 文件。
 
 
 def build_model() -> ChatModelBase:
-    """按优先级自动选择可用厂商并创建对话模型。"""
+    """按优先级自动选择可用厂商并创建对话模型。
+
+    优先级为 OpenAI、DashScope、Ollama、DeepSeek。
+    所选凭证和模型字符串会传入 AgentScope 对应的 ChatModel 子类。
+    """
+    # os.getenv 找不到变量时返回 None；这里把空字符串和 None 都视为未配置。
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if openai_api_key:
+        # OPENAI_BASE_URL 可为空；或 None 表示使用 SDK 默认 API 地址。
         return OpenAIChatModel(
             credential=OpenAICredential(
                 api_key=openai_api_key,

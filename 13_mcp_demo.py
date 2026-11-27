@@ -13,7 +13,11 @@ from model_config import build_model
 
 
 def build_filesystem_mcp_config() -> dict[str, Any]:
-    """构造适用于当前操作系统的本机文件系统 MCP 配置。"""
+    """构造适用于当前操作系统的本机文件系统 MCP 配置。
+
+    MCP stdio 模式通过标准输入输出启动子进程并持续通信。
+    配置中的 command 和 args 会告诉 AgentScope 如何启动该子进程。
+    """
     if shutil.which("npx") is None:
         raise RuntimeError(
             "当前 Python 进程的 PATH 中找不到 npx。"
